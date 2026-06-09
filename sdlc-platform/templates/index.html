@@ -50,46 +50,112 @@
       <!-- ── Section: New Request ── -->
       <section class="section" id="section-new-request">
 
-        <!-- Step 1: Requirement form -->
+        <!-- Step 1: Requirement form (tabbed) -->
         <div id="step-form">
-          <h2 class="section__title">Submit New Requirement</h2>
-          <form id="requirementForm" class="form">
-            <div class="form__row">
-              <label class="form__label" for="projectName">Project Name</label>
-              <input class="form__input" type="text" id="projectName" placeholder="e.g. Customer Portal Upgrade" required>
-            </div>
-            <div class="form__row">
-              <label class="form__label" for="requirementText">Requirement Description</label>
-              <textarea class="form__textarea" id="requirementText" rows="5"
-                placeholder="Describe what needs to be built. The more detail, the better the AI output." required></textarea>
-            </div>
-            <div class="form__row form__row--split">
-              <div>
-                <label class="form__label" for="priority">Priority</label>
-                <select class="form__select" id="priority">
+          <h2 class="section__title">New Request</h2>
+
+          <!-- Tab bar -->
+          <div class="tab-bar">
+            <button class="tab-btn tab-btn--active" data-tab="ai">AI Analysis ✨</button>
+            <button class="tab-btn" data-tab="manual">Manual Entry ✏️</button>
+          </div>
+
+          <!-- AI Analysis tab -->
+          <div id="tab-ai" class="tab-content">
+            <form id="requirementForm" class="form">
+              <div class="form__row">
+                <label class="form__label" for="projectName">Project Name</label>
+                <input class="form__input" type="text" id="projectName" placeholder="e.g. Customer Portal Upgrade" required>
+              </div>
+              <div class="form__row">
+                <label class="form__label" for="requirementText">Requirement Description</label>
+                <textarea class="form__textarea" id="requirementText" rows="5"
+                  placeholder="Describe what needs to be built. The more detail, the better the AI output." required></textarea>
+              </div>
+              <div class="form__row form__row--split">
+                <div>
+                  <label class="form__label" for="priority">Priority</label>
+                  <select class="form__select" id="priority">
+                    <option value="Low">Low</option>
+                    <option value="Medium" selected>Medium</option>
+                    <option value="High">High</option>
+                    <option value="Critical">Critical</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form__label" for="department">Target Department</label>
+                  <select class="form__select" id="department">
+                    <option value="Backend Dev">Backend Dev</option>
+                    <option value="Frontend Dev">Frontend Dev</option>
+                    <option value="QA">QA</option>
+                    <option value="DevOps">DevOps</option>
+                    <option value="Business Analysis">Business Analysis</option>
+                    <option value="All Teams">All Teams</option>
+                  </select>
+                </div>
+              </div>
+              <button class="btn btn--primary btn--full" type="submit" id="analyzeBtn">
+                <span id="analyzeBtnText">Analyze with AI ✨</span>
+                <span id="analyzeSpinner" class="spinner hidden"></span>
+              </button>
+            </form>
+          </div>
+
+          <!-- Manual Entry tab -->
+          <div id="tab-manual" class="tab-content hidden">
+            <form id="manualForm" class="form">
+              <div class="form__row">
+                <label class="form__label" for="manualProjectName">Project Name</label>
+                <input class="form__input" type="text" id="manualProjectName" placeholder="e.g. Customer Portal Upgrade">
+              </div>
+              <div class="form__row">
+                <label class="form__label" for="manualTitle">Task Title *</label>
+                <input class="form__input" type="text" id="manualTitle" placeholder="e.g. Set up authentication module">
+              </div>
+              <div class="form__row">
+                <label class="form__label" for="manualDescription">Description *</label>
+                <textarea class="form__textarea" id="manualDescription" rows="3"
+                  placeholder="What needs to be done for this task?"></textarea>
+              </div>
+              <div class="form__row form__row--split">
+                <div>
+                  <label class="form__label" for="manualDepartment">Department</label>
+                  <select class="form__select" id="manualDepartment">
+                    <option value="Backend Dev">Backend Dev</option>
+                    <option value="Frontend Dev">Frontend Dev</option>
+                    <option value="QA">QA</option>
+                    <option value="DevOps">DevOps</option>
+                    <option value="Business Analysis">Business Analysis</option>
+                    <option value="Security">Security</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form__label" for="manualHours">Effort Hours</label>
+                  <input class="form__input" type="number" id="manualHours" min="1" max="999" placeholder="8">
+                </div>
+              </div>
+              <div class="form__row">
+                <label class="form__label" for="manualPriority">Priority</label>
+                <select class="form__select" id="manualPriority">
                   <option value="Low">Low</option>
                   <option value="Medium" selected>Medium</option>
                   <option value="High">High</option>
                   <option value="Critical">Critical</option>
                 </select>
               </div>
-              <div>
-                <label class="form__label" for="department">Target Department</label>
-                <select class="form__select" id="department">
-                  <option value="Backend Dev">Backend Dev</option>
-                  <option value="Frontend Dev">Frontend Dev</option>
-                  <option value="QA">QA</option>
-                  <option value="DevOps">DevOps</option>
-                  <option value="Business Analysis">Business Analysis</option>
-                  <option value="All Teams">All Teams</option>
-                </select>
-              </div>
-            </div>
-            <button class="btn btn--primary btn--full" type="submit" id="analyzeBtn">
-              <span id="analyzeBtnText">Analyze with AI ✨</span>
-              <span id="analyzeSpinner" class="spinner hidden"></span>
+              <button class="btn btn--ghost btn--full" type="submit" id="addManualTaskBtn">
+                + Add Task to List
+              </button>
+            </form>
+
+            <!-- Pending tasks list -->
+            <div id="manualTaskList" class="manual-task-list hidden"></div>
+
+            <button class="btn btn--success btn--full" id="manualReviewBtn" disabled>
+              Review &amp; Create Jira Tickets →
             </button>
-          </form>
+          </div>
+
         </div>
 
         <!-- Step 2: AI results + HITL review -->
