@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI SDLC Platform — SET Thailand</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <!-- ── Navbar ── -->
+  <header class="navbar">
+    <div class="navbar__brand">
+      <span class="navbar__icon">⚡</span>
+      <span class="navbar__title">AI SDLC Platform</span>
+      <span class="navbar__sub">SET Thailand — TSD</span>
+    </div>
+    <div class="navbar__status" id="navStatus">
+      <span class="status-dot status-dot--ready"></span>
+      <span>Ready</span>
+    </div>
+  </header>
+
+  <!-- ── Main layout ── -->
+  <div class="layout">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <nav class="sidebar__nav">
+        <button class="sidebar__item sidebar__item--active" data-section="new-request">
+          <span class="sidebar__icon">📋</span>
+          <span>New Request</span>
+        </button>
+        <button class="sidebar__item" data-section="jira-board">
+          <span class="sidebar__icon">📌</span>
+          <span>Jira Board</span>
+          <span class="sidebar__badge" id="ticketBadge">0</span>
+        </button>
+        <button class="sidebar__item" data-section="history">
+          <span class="sidebar__icon">📂</span>
+          <span>History</span>
+          <span class="sidebar__badge" id="historyBadge">0</span>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Main panel -->
+    <main class="main-panel">
+
+      <!-- ── Section: New Request ── -->
+      <section class="section" id="section-new-request">
+
+        <!-- Step 1: Requirement form -->
+        <div id="step-form">
+          <h2 class="section__title">Submit New Requirement</h2>
+          <form id="requirementForm" class="form">
+            <div class="form__row">
+              <label class="form__label" for="projectName">Project Name</label>
+              <input class="form__input" type="text" id="projectName" placeholder="e.g. Customer Portal Upgrade" required>
+            </div>
+            <div class="form__row">
+              <label class="form__label" for="requirementText">Requirement Description</label>
+              <textarea class="form__textarea" id="requirementText" rows="5"
+                placeholder="Describe what needs to be built. The more detail, the better the AI output." required></textarea>
+            </div>
+            <div class="form__row form__row--split">
+              <div>
+                <label class="form__label" for="priority">Priority</label>
+                <select class="form__select" id="priority">
+                  <option value="Low">Low</option>
+                  <option value="Medium" selected>Medium</option>
+                  <option value="High">High</option>
+                  <option value="Critical">Critical</option>
+                </select>
+              </div>
+              <div>
+                <label class="form__label" for="department">Target Department</label>
+                <select class="form__select" id="department">
+                  <option value="Backend Dev">Backend Dev</option>
+                  <option value="Frontend Dev">Frontend Dev</option>
+                  <option value="QA">QA</option>
+                  <option value="DevOps">DevOps</option>
+                  <option value="Business Analysis">Business Analysis</option>
+                  <option value="All Teams">All Teams</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn btn--primary btn--full" type="submit" id="analyzeBtn">
+              <span id="analyzeBtnText">Analyze with AI ✨</span>
+              <span id="analyzeSpinner" class="spinner hidden"></span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Step 2: AI results + HITL review -->
+        <div id="step-review" class="hidden">
+          <div class="review-header">
+            <h2 class="section__title">Review AI Output</h2>
+            <button class="btn btn--ghost" id="backToFormBtn">← Back</button>
+          </div>
+
+          <div class="review-meta" id="reviewMeta"></div>
+
+          <h3 class="subsection__title">User Stories</h3>
+          <ul class="story-list" id="storyList"></ul>
+
+          <div class="review-tasks-header">
+            <h3 class="subsection__title">Tasks <span id="taskCount"></span></h3>
+            <button class="btn btn--ghost btn--sm" id="addTaskBtn">+ Add Task</button>
+          </div>
+          <div id="taskCards"></div>
+
+          <div class="review-summary" id="reviewSummary"></div>
+
+          <button class="btn btn--success btn--full" id="approveBtn">
+            <span id="approveBtnText">Approve & Create Jira Tickets ✅</span>
+            <span id="approveSpinner" class="spinner hidden"></span>
+          </button>
+        </div>
+
+        <!-- Step 3: Success result -->
+        <div id="step-success" class="hidden">
+          <div class="success-banner">
+            <div class="success-banner__icon">🎉</div>
+            <h2 class="success-banner__title">Done!</h2>
+            <p class="success-banner__sub" id="successSub"></p>
+          </div>
+          <div id="createdTickets"></div>
+          <div class="email-preview" id="emailPreview"></div>
+          <button class="btn btn--primary" id="newRequestBtn">Submit Another Requirement</button>
+        </div>
+
+      </section>
+
+      <!-- ── Section: Jira Board ── -->
+      <section class="section hidden" id="section-jira-board">
+        <h2 class="section__title">Jira Board</h2>
+        <div class="kanban" id="kanban">
+          <div class="kanban__col" data-status="To Do">
+            <h3 class="kanban__col-title">To Do</h3>
+            <div class="kanban__cards" id="col-todo"></div>
+          </div>
+          <div class="kanban__col" data-status="In Progress">
+            <h3 class="kanban__col-title">In Progress</h3>
+            <div class="kanban__cards" id="col-inprogress"></div>
+          </div>
+          <div class="kanban__col" data-status="In Review">
+            <h3 class="kanban__col-title">In Review</h3>
+            <div class="kanban__cards" id="col-inreview"></div>
+          </div>
+          <div class="kanban__col" data-status="Done">
+            <h3 class="kanban__col-title">Done</h3>
+            <div class="kanban__cards" id="col-done"></div>
+          </div>
+        </div>
+        <p class="empty-state hidden" id="boardEmpty">No tickets yet. Submit a requirement to get started.</p>
+      </section>
+
+      <!-- ── Section: History ── -->
+      <section class="section hidden" id="section-history">
+        <h2 class="section__title">Request History</h2>
+        <table class="history-table" id="historyTable">
+          <thead>
+            <tr>
+              <th>REQ ID</th>
+              <th>Project</th>
+              <th>Priority</th>
+              <th>Department</th>
+              <th>Tickets</th>
+              <th>Hours</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+        <p class="empty-state hidden" id="historyEmpty">No history yet.</p>
+      </section>
+
+    </main>
+
+    <!-- Activity panel -->
+    <aside class="activity-panel">
+      <h3 class="activity-panel__title">Activity Log</h3>
+      <div class="activity-log" id="activityLog">
+        <p class="activity-log__empty">Activity will appear here as you work.</p>
+      </div>
+    </aside>
+
+  </div>
+
+  <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>
