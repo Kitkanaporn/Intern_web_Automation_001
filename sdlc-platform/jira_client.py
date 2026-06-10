@@ -126,3 +126,22 @@ def update_status(issue_key: str, target_status: str) -> None:
         timeout=10,
     )
     response.raise_for_status()
+
+
+def get_status(issue_key: str) -> str:
+    """
+    Fetch the current status name for a Jira issue.
+    Returns string like 'To Do', 'In Progress', etc.
+    """
+    url, email, token, _ = _get_config()
+    auth, headers = _auth_headers(email, token)
+
+    response = requests.get(
+        f"{url}/rest/api/3/issue/{issue_key}",
+        params={"fields": "status"},
+        auth=auth,
+        headers=headers,
+        timeout=10,
+    )
+    response.raise_for_status()
+    return response.json()["fields"]["status"]["name"]

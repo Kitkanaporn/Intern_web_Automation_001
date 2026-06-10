@@ -11,6 +11,8 @@ const state = {
   tasks: [],
 };
 
+const manualTasks = [];
+
 // ── DOM references ────────────────────────────────────────────
 const navStatus = document.getElementById("navStatus");
 const activityLog = document.getElementById("activityLog");
@@ -54,8 +56,45 @@ const initSidebar = () => {
       document.querySelectorAll(".section").forEach(s => s.classList.add("hidden"));
       document.getElementById(`section-${target}`).classList.remove("hidden");
 
-      if (target === "jira-board") loadKanban();
+      if (target === "jira-board") loadJiraBrowser();
       if (target === "history") loadHistory();
+    });
+  });
+};
+
+// ── Jira Browser logic ────────────────────────────────────────
+const loadJiraBrowser = async () => {
+  const iframe = document.getElementById("jiraIframe");
+  const portalLink = document.getElementById("jiraPortalLink");
+
+  // Only fetch and set URL if not already loaded
+  if (!iframe.src || iframe.src.includes(window.location.origin)) {
+    try {
+      setStatus("working", "Loading Jira...");
+      const res = await fetch("/api/config");
+      const config = await res.json();
+      
+      iframe.src = config.jira_url;
+      portalLink.href = config.jira_url;
+      setStatus("ready", "Ready");
+    } catch (err) {
+      console.error("Failed to load Jira config:", err);
+      setStatus("error", "Jira Config Error");
+    }
+  }
+};
+
+// ── Tab switching inside New Request section ──────────────────
+const initTabs = () => {
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  tabBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      tabBtns.forEach(b => b.classList.remove("tab-btn--active"));
+      btn.classList.add("tab-btn--active");
+
+      const target = btn.dataset.tab;
+      document.querySelectorAll(".tab-content").forEach(c => c.classList.add("hidden"));
+      document.getElementById(`tab-${target}`).classList.remove("hidden");
     });
   });
 };
@@ -75,13 +114,86 @@ const initForm = () => {
   const btnText = document.getElementById("analyzeBtnText");
   const spinner = document.getElementById("analyzeSpinner");
 
+  const projectInput = document.getElementById("projectName");
+  const requirementInput = document.getElementById("requirementText");
+  const additionalPromptInput = document.getElementById("additionalPrompt");
+
+  // Auto-save logic
+  const loadSaved = () => {
+    projectInput.value = localStorage.getItem("sdlc_draft_project") || "";
+    requirementInput.value = localStorage.getItem("sdlc_draft_req") || "";
+    additionalPromptInput.value = localStorage.getItem("sdlc_draft_add_prompt") || "";
+  };
+
+  const saveDraft = () => {
+    localStorage.setItem("sdlc_draft_project", projectInput.value);
+    localStorage.setItem("sdlc_draft_req", requirementInput.value);
+    localStorage.setItem("sdlc_draft_add_prompt", additionalPromptInput.value);
+  };
+
+  projectInput.addEventListener("input", saveDraft);
+  requirementInput.addEventListener("input", saveDraft);
+  additionalPromptInput.addEventListener("input", saveDraft);
+  loadSaved();
+
+  // Dual-range slider logic
+  const initDualSlider = (minId, maxId, valId, trackId) => {
+    const minInput = document.getElementById(minId);
+    const maxInput = document.getElementById(maxId);
+    const valDisplay = document.getElementById(valId);
+    const track = document.getElementById(trackId);
+
+    const update = (e) => {
+      let minVal = parseInt(minInput.value);
+      let maxVal = parseInt(maxInput.value);
+
+      // Prevent crossing
+      if (minVal > maxVal) {
+        // If min was moved, push max
+        if (e && e.target === minInput) {
+          maxVal = minVal;
+          maxInput.value = maxVal;
+        } else {
+          minVal = maxVal;
+          minInput.value = minVal;
+        }
+      }
+
+      valDisplay.textContent = `${minVal} - ${maxVal}`;
+
+      // Update track visual
+      const minPercent = ((minVal - minInput.min) / (minInput.max - minInput.min)) * 100;
+      const maxPercent = ((maxVal - maxInput.min) / (maxInput.max - maxInput.min)) * 100;
+
+      // Remove existing active track if any
+      const active = track.querySelector(".range-track-active") || document.createElement("div");
+      active.className = "range-track-active";
+      active.style.left = `${minPercent}%`;
+      active.style.width = `${maxPercent - minPercent}%`;
+      if (!active.parentNode) track.appendChild(active);
+    };
+
+    minInput.addEventListener("input", update);
+    maxInput.addEventListener("input", update);
+    update(); // Init
+  };
+
+  initDualSlider("minStories", "maxStories", "valStories", "trackStories");
+  initDualSlider("minTasks", "maxTasks", "valTasks", "trackTasks");
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    state.projectName = document.getElementById("projectName").value.trim();
-    state.requirement = document.getElementById("requirementText").value.trim();
+    state.projectName = projectInput.value.trim();
+    state.requirement = requirementInput.value.trim();
     state.priority = document.getElementById("priority").value;
     state.department = document.getElementById("department").value;
+    
+    // Custom Min/Max ranges from dual sliders
+    const minS = document.getElementById("minStories").value;
+    const maxS = document.getElementById("maxStories").value;
+    const minT = document.getElementById("minTasks").value;
+    const maxT = document.getElementById("maxTasks").value;
 
     btn.disabled = true;
     btnText.textContent = "Analyzing...";
@@ -93,7 +205,13 @@ const initForm = () => {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requirement: state.requirement }),
+        body: JSON.stringify({ 
+          requirement: state.requirement,
+          min_stories: parseInt(minS),
+          max_stories: parseInt(maxS),
+          min_tasks: parseInt(minT),
+          max_tasks: parseInt(maxT)
+        }),
       });
       const data = await res.json();
 
@@ -106,6 +224,11 @@ const initForm = () => {
 
       logActivity("🤖", `AI generated <strong>${state.tasks.length} tasks</strong> and <strong>${state.userStories.length} user stories</strong>`);
       setStatus("ready", "Ready");
+      
+      // Reset drafting state on successful analysis
+      localStorage.removeItem("sdlc_draft_project");
+      localStorage.removeItem("sdlc_draft_req");
+
       renderReview();
       showStep("step-review");
 
@@ -123,7 +246,141 @@ const initForm = () => {
   document.getElementById("backToFormBtn").addEventListener("click", () => showStep("step-form"));
   document.getElementById("newRequestBtn").addEventListener("click", () => {
     form.reset();
+    document.getElementById("manualForm").reset();
+    manualTasks.length = 0;
+    renderManualTaskList();
+    document.querySelector("#step-review .section__title").textContent = "Review AI Output";
     showStep("step-form");
+  });
+
+  // Regenerate button handler
+  document.getElementById("regenerateBtn").addEventListener("click", async () => {
+    const regenerateBtn = document.getElementById("regenerateBtn");
+    const regenerateBtnText = document.getElementById("regenerateBtnText");
+    const regenerateSpinner = document.getElementById("regenerateSpinner");
+    const refinePrompt = document.getElementById("refinePrompt").value.trim();
+
+    regenerateBtn.disabled = true;
+    regenerateBtnText.textContent = "Regenerating...";
+    regenerateSpinner.classList.remove("hidden");
+    setStatus("working", "AI Refining...");
+    logActivity("🔄", `Regenerating with feedback: <em>"${escapeHtml(refinePrompt.substring(0, 50))}..."</em>`);
+
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requirement: state.requirement, // Use the original requirement
+          additional_prompt: refinePrompt, // Add the refinement prompt
+          min_stories: parseInt(document.getElementById("minStories").value),
+          max_stories: parseInt(document.getElementById("maxStories").value),
+          min_tasks: parseInt(document.getElementById("minTasks").value),
+          max_tasks: parseInt(document.getElementById("maxTasks").value)
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "API error");
+      }
+
+      state.userStories = data.user_stories || [];
+      state.tasks = data.tasks || [];
+
+      logActivity("🤖", `AI regenerated <strong>${state.tasks.length} tasks</strong> and <strong>${state.userStories.length} user stories</strong>`);
+      setStatus("ready", "Ready");
+      
+      document.getElementById("refinePrompt").value = ""; // Clear refinement prompt
+
+      renderReview();
+    } catch (err) {
+      logActivity("❌", `AI regeneration failed: ${err.message}`);
+      setStatus("error", "Error");
+      alert(`Error: ${err.message}`);
+    } finally {
+      regenerateBtn.disabled = false;
+      regenerateBtnText.textContent = "Regenerate with Refinements ✨";
+      regenerateSpinner.classList.add("hidden");
+    }
+  });
+};
+
+// ── Manual task state and list ────────────────────────────────
+const renderManualTaskList = () => {
+  const list = document.getElementById("manualTaskList");
+  const reviewBtn = document.getElementById("manualReviewBtn");
+
+  if (manualTasks.length === 0) {
+    list.classList.add("hidden");
+    reviewBtn.disabled = true;
+    return;
+  }
+
+  list.classList.remove("hidden");
+  reviewBtn.disabled = false;
+  list.innerHTML = `<p class="subsection__title">Tasks added (${manualTasks.length})</p>`;
+
+  manualTasks.forEach((task, i) => {
+    const item = document.createElement("div");
+    item.className = "manual-task-item";
+    item.innerHTML = `
+      <div class="manual-task-item__info">
+        <span class="manual-task-item__title">${escapeHtml(task.title)}</span>
+        <span class="manual-task-item__meta">${escapeHtml(task.department)} · ${task.effort_hours}h · ${task.priority}</span>
+      </div>
+      <button class="btn btn--danger-ghost" data-remove="${i}">🗑</button>
+    `;
+    item.querySelector("[data-remove]").addEventListener("click", () => {
+      manualTasks.splice(i, 1);
+      renderManualTaskList();
+    });
+    list.appendChild(item);
+  });
+};
+
+const initManualForm = () => {
+  const form = document.getElementById("manualForm");
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+
+    const title = document.getElementById("manualTitle").value.trim();
+    const description = document.getElementById("manualDescription").value.trim();
+    if (!title || !description) return;
+
+    manualTasks.push({
+      title,
+      description,
+      effort_hours: parseInt(document.getElementById("manualHours").value) || 4,
+      department: document.getElementById("manualDepartment").value,
+      priority: document.getElementById("manualPriority").value,
+    });
+
+    document.getElementById("manualTitle").value = "";
+    document.getElementById("manualDescription").value = "";
+    document.getElementById("manualHours").value = "";
+
+    renderManualTaskList();
+    logActivity("✏️", `Manual task added: <strong>${escapeHtml(title)}</strong>`);
+  });
+};
+
+const initManualReview = () => {
+  document.getElementById("manualReviewBtn").addEventListener("click", () => {
+    if (manualTasks.length === 0) return;
+
+    state.projectName = document.getElementById("manualProjectName").value.trim() || "Manual Entry";
+    state.priority = document.getElementById("manualPriority").value;
+    state.department = document.getElementById("manualDepartment").value;
+    state.requirement = "(Manual entry — no AI analysis)";
+    state.userStories = [];
+    state.tasks = manualTasks.map(t => ({ ...t }));
+
+    document.querySelector("#step-review .section__title").textContent = "Review Manual Tasks";
+
+    logActivity("✏️", `Manual review started: <strong>${state.tasks.length} tasks</strong> for <strong>${state.projectName}</strong>`);
+    renderReview();
+    showStep("step-review");
   });
 };
 
@@ -145,26 +402,56 @@ const renderReview = () => {
     </div>
   `;
 
-  // User stories
-  const storyList = document.getElementById("storyList");
-  storyList.innerHTML = state.userStories
-    .map(s => `<li class="story-list__item">${s}</li>`)
-    .join("");
+  const container = document.getElementById("roadmapContainer");
+  container.innerHTML = "";
 
-  renderTaskCards();
+  // 1. Render General / Manual Tasks at the top (story_index is null or undefined)
+  const generalTasks = state.tasks
+    .map((t, i) => ({ ...t, originalIndex: i }))
+    .filter(t => t.story_index === null || t.story_index === undefined);
+
+  if (generalTasks.length > 0) {
+    const section = document.createElement("div");
+    section.className = "roadmap-section";
+    section.innerHTML = `<h4 class="roadmap-section__title">General & Manual Tasks</h4>`;
+    renderTaskCards(section, generalTasks);
+    container.appendChild(section);
+  }
+
+  // 2. Render tasks grouped under each User Story
+  state.userStories.forEach((story, sIdx) => {
+    const storyTasks = state.tasks
+      .map((t, i) => ({ ...t, originalIndex: i }))
+      .filter(t => t.story_index === sIdx);
+
+    const section = document.createElement("div");
+    section.className = "roadmap-section";
+    section.innerHTML = `
+      <div class="story-card">
+        <div class="story-card__label">User Story #${sIdx + 1}</div>
+        <div class="story-card__text">${escapeHtml(story)}</div>
+      </div>
+    `;
+    
+    if (storyTasks.length > 0) {
+      renderTaskCards(section, storyTasks);
+    } else {
+      section.innerHTML += `<p class="roadmap-section__empty">No tasks linked to this story.</p>`;
+    }
+    
+    container.appendChild(section);
+  });
+
   updateReviewSummary();
 };
 
-// ── Render editable task cards ────────────────────────────────
-const renderTaskCards = () => {
-  const container = document.getElementById("taskCards");
-  document.getElementById("taskCount").textContent = `(${state.tasks.length})`;
-
-  container.innerHTML = "";
+// ── Render editable task cards into a section ────────────────
+const renderTaskCards = (parent, tasksToRender) => {
   const wrapper = document.createElement("div");
   wrapper.className = "task-cards";
 
-  state.tasks.forEach((task, i) => {
+  tasksToRender.forEach((task) => {
+    const i = task.originalIndex;
     const card = document.createElement("div");
     card.className = "task-card";
     card.dataset.index = i;
@@ -173,7 +460,7 @@ const renderTaskCards = () => {
         <input class="task-card__title" type="text" value="${escapeHtml(task.title)}" data-field="title" data-index="${i}">
         <button class="btn btn--danger-ghost" data-delete="${i}" title="Remove task">🗑</button>
       </div>
-      <p class="task-card__desc">${escapeHtml(task.description)}</p>
+      <textarea class="form__textarea task-card__desc-edit" data-field="description" data-index="${i}" rows="2">${escapeHtml(task.description)}</textarea>
       <div class="task-card__footer">
         <span class="task-card__tag">${escapeHtml(task.department)}</span>
         <div class="task-card__hours">
@@ -185,45 +472,49 @@ const renderTaskCards = () => {
     wrapper.appendChild(card);
   });
 
-  container.appendChild(wrapper);
+  parent.appendChild(wrapper);
 
-  // Edit title
-  container.querySelectorAll("[data-field='title']").forEach(input => {
+  // Re-bind listeners for the newly created elements
+  wrapper.querySelectorAll("[data-field='title']").forEach(input => {
     input.addEventListener("input", (e) => {
       state.tasks[parseInt(e.target.dataset.index)].title = e.target.value;
       updateReviewSummary();
     });
   });
 
-  // Edit hours
-  container.querySelectorAll("[data-field='effort_hours']").forEach(input => {
+  wrapper.querySelectorAll("[data-field='description']").forEach(textarea => {
+    textarea.addEventListener("input", (e) => {
+      state.tasks[parseInt(e.target.dataset.index)].description = e.target.value;
+    });
+  });
+
+  wrapper.querySelectorAll("[data-field='effort_hours']").forEach(input => {
     input.addEventListener("input", (e) => {
       state.tasks[parseInt(e.target.dataset.index)].effort_hours = parseInt(e.target.value) || 0;
       updateReviewSummary();
     });
   });
 
-  // Delete task
-  container.querySelectorAll("[data-delete]").forEach(btn => {
+  wrapper.querySelectorAll("[data-delete]").forEach(btn => {
     btn.addEventListener("click", (e) => {
       const idx = parseInt(e.currentTarget.dataset.delete);
       state.tasks.splice(idx, 1);
-      renderTaskCards();
-      updateReviewSummary();
+      renderReview(); // Re-render everything to update groupings
     });
   });
 };
 
 // ── Add blank task card ───────────────────────────────────────
 document.getElementById("addTaskBtn").addEventListener("click", () => {
-  state.tasks.push({
+  // Use unshift to put new tasks at the top
+  state.tasks.unshift({
     title: "New Task",
     description: "Describe this task",
     effort_hours: 4,
     department: state.department,
+    story_index: null // Manual tasks aren't linked to a story by default
   });
-  renderTaskCards();
-  updateReviewSummary();
+  renderReview();
 });
 
 // ── Update the total hours summary ───────────────────────────
@@ -246,7 +537,7 @@ const initApprove = () => {
     btnText.textContent = "Creating tickets...";
     spinner.classList.remove("hidden");
     setStatus("working", "Creating...");
-    logActivity("✅", "Human approved AI output");
+    logActivity("✅", "Human approved tasks");
 
     try {
       const res = await fetch("/api/approve", {
@@ -265,7 +556,8 @@ const initApprove = () => {
       if (!res.ok || data.error) throw new Error(data.error || "API error");
 
       logActivity("🎫", `<strong>${data.tickets.length} Jira tickets</strong> created (${data.req_id})`);
-      logActivity("📧", `Mock email sent to <strong>${state.department}</strong> team`);
+      logActivity("📧", `Kickoff email sent to <strong>${state.department}</strong> team`);
+      logActivity("📝", `Confluence spec page created for <strong>${state.projectName}</strong>`);
       setStatus("ready", "Ready");
 
       updateBadges();
@@ -310,105 +602,11 @@ const renderSuccess = (data) => {
   // Email preview
   const ep = data.email_preview;
   document.getElementById("emailPreview").innerHTML = `
-    <div class="email-preview__label">📧 Mock Email Notification</div>
+    <div class="email-preview__label">📧 Kickoff Email Sent</div>
     <div class="email-preview__field"><strong>To:</strong> ${escapeHtml(ep.to)}</div>
     <div class="email-preview__field"><strong>Subject:</strong> ${escapeHtml(ep.subject)}</div>
     <div class="email-preview__body">${escapeHtml(ep.body)}</div>
   `;
-};
-
-// ── Load Kanban board ─────────────────────────────────────────
-const loadKanban = async () => {
-  try {
-    const res = await fetch("/api/tickets");
-    const tickets = await res.json();
-
-    const colTodo = document.getElementById("col-todo");
-    const colInProgress = document.getElementById("col-inprogress");
-    const colInReview = document.getElementById("col-inreview");
-    const colDone = document.getElementById("col-done");
-    const boardEmpty = document.getElementById("boardEmpty");
-
-    colTodo.innerHTML = "";
-    colInProgress.innerHTML = "";
-    colInReview.innerHTML = "";
-    colDone.innerHTML = "";
-
-    if (tickets.length === 0) {
-      boardEmpty.classList.remove("hidden");
-      return;
-    }
-
-    boardEmpty.classList.add("hidden");
-    tickets.forEach(t => {
-      const card = buildKanbanCard(t);
-      if (t.status === "To Do") colTodo.appendChild(card);
-      else if (t.status === "In Progress") colInProgress.appendChild(card);
-      else if (t.status === "In Review") colInReview.appendChild(card);
-      else colDone.appendChild(card);
-    });
-
-  } catch (err) {
-    console.error("Failed to load Kanban:", err);
-  }
-};
-
-// All 4 Jira statuses
-const JIRA_STATUSES = ["To Do", "In Progress", "In Review", "Done"];
-
-// ── Build a single Kanban card with status dropdown ───────────
-const buildKanbanCard = (ticket) => {
-  const card = document.createElement("div");
-  card.className = "kanban-card";
-  card.dataset.id = ticket.id;
-
-  // Build status options — exclude current status
-  const options = JIRA_STATUSES
-    .filter(s => s !== ticket.status)
-    .map(s => `<option value="${s}">${s}</option>`)
-    .join("");
-
-  card.innerHTML = `
-    <div class="kanban-card__id">${ticket.id}</div>
-    <div class="kanban-card__title">${escapeHtml(ticket.title)}</div>
-    <div class="kanban-card__meta">
-      <span class="kanban-card__tag">${escapeHtml(ticket.department)}</span>
-      <span class="kanban-card__tag">⏱ ${ticket.effort_hours}h</span>
-    </div>
-    <select class="kanban-card__status-select" data-jira-key="${ticket.id}">
-      <option value="">Move to...</option>
-      ${options}
-    </select>
-  `;
-
-  // Status change handler — calls Jira API via Flask
-  card.querySelector("select").addEventListener("change", async (e) => {
-    const newStatus = e.target.value;
-    if (!newStatus) return;
-
-    const jiraKey = e.target.dataset.jiraKey;
-    e.target.disabled = true;
-
-    try {
-      const res = await fetch(`/api/ticket/${jiraKey}/status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update status");
-
-      logActivity("🔄", `<strong>${jiraKey}</strong> moved to <strong>${newStatus}</strong>`);
-      loadKanban(); // reload board to move card to new column
-
-    } catch (err) {
-      logActivity("❌", `Status update failed: ${err.message}`);
-      e.target.value = "";
-      e.target.disabled = false;
-    }
-  });
-
-  return card;
 };
 
 // ── Load history table ────────────────────────────────────────
@@ -469,8 +667,39 @@ const escapeHtml = (str) => {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 };
-
 // ── Init ──────────────────────────────────────────────────────
 initSidebar();
+initTabs();
 initForm();
+initManualForm();
+initManualReview();
 initApprove();
+initThemeToggle();
+
+// ── Theme Toggle Logic ────────────────────────────────────────
+function initThemeToggle() {
+  const themeToggleBtn = document.getElementById("themeToggle");
+  const body = document.body;
+
+  // Load saved theme preference
+  const savedTheme = localStorage.getItem("theme");
+  if (savedTheme === "light") {
+    body.classList.add("light-mode");
+    themeToggleBtn.querySelector("span").textContent = "🌙"; // Moon icon for light mode
+  } else {
+    themeToggleBtn.querySelector("span").textContent = "💡"; // Bulb icon for dark mode
+  }
+
+  themeToggleBtn.addEventListener("click", () => {
+    if (body.classList.contains("light-mode")) {
+      body.classList.remove("light-mode");
+      localStorage.setItem("theme", "dark");
+      themeToggleBtn.querySelector("span").textContent = "💡";
+    } else {
+      body.classList.add("light-mode");
+      localStorage.setItem("theme", "light");
+      themeToggleBtn.querySelector("span").textContent = "🌙";
+    }
+  });
+}
+
