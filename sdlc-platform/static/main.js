@@ -62,28 +62,6 @@ const initSidebar = () => {
   });
 };
 
-// ── Jira Browser logic ────────────────────────────────────────
-const loadJiraBrowser = async () => {
-  const iframe = document.getElementById("jiraIframe");
-  const portalLink = document.getElementById("jiraPortalLink");
-
-  // Only fetch and set URL if not already loaded
-  if (!iframe.src || iframe.src.includes(window.location.origin)) {
-    try {
-      setStatus("working", "Loading Jira...");
-      const res = await fetch("/api/config");
-      const config = await res.json();
-      
-      iframe.src = config.jira_url;
-      portalLink.href = config.jira_url;
-      setStatus("ready", "Ready");
-    } catch (err) {
-      console.error("Failed to load Jira config:", err);
-      setStatus("error", "Jira Config Error");
-    }
-  }
-};
-
 // ── Tab switching inside New Request section ──────────────────
 const initTabs = () => {
   const tabBtns = document.querySelectorAll(".tab-btn");
@@ -105,6 +83,70 @@ const showStep = (stepId) => {
     document.getElementById(id).classList.add("hidden");
   });
   document.getElementById(stepId).classList.remove("hidden");
+};
+
+// ── Manual task state and list ────────────────────────────────
+const manualTasks = [];
+
+// Re-render the pending tasks list below the manual form
+const renderManualTaskList = () => {
+  const list = document.getElementById("manualTaskList");
+  const reviewBtn = document.getElementById("manualReviewBtn");
+
+  if (manualTasks.length === 0) {
+    list.classList.add("hidden");
+    reviewBtn.disabled = true;
+    return;
+  }
+
+  list.classList.remove("hidden");
+  reviewBtn.disabled = false;
+  list.innerHTML = `<p class="subsection__title">Tasks added (${manualTasks.length})</p>`;
+
+  manualTasks.forEach((task, i) => {
+    const item = document.createElement("div");
+    item.className = "manual-task-item";
+    item.innerHTML = `
+      <div class="manual-task-item__info">
+        <span class="manual-task-item__title">${escapeHtml(task.title)}</span>
+        <span class="manual-task-item__meta">${escapeHtml(task.department)} · ${task.effort_hours}h · ${task.priority}</span>
+      </div>
+      <button class="btn btn--danger-ghost" data-remove="${i}">🗑</button>
+    `;
+    item.querySelector("[data-remove]").addEventListener("click", () => {
+      manualTasks.splice(i, 1);
+      renderManualTaskList();
+    });
+    list.appendChild(item);
+  });
+};
+
+// Handle "Add Task to List" form submission
+const initManualForm = () => {
+  const form = document.getElementById("manualForm");
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+
+    const title = document.getElementById("manualTitle").value.trim();
+    const description = document.getElementById("manualDescription").value.trim();
+    if (!title || !description) return;
+
+    manualTasks.push({
+      title,
+      description,
+      effort_hours: parseInt(document.getElementById("manualHours").value) || 4,
+      department: document.getElementById("manualDepartment").value,
+      priority: document.getElementById("manualPriority").value,
+    });
+
+    // Clear just the task-specific fields, keep project name
+    document.getElementById("manualTitle").value = "";
+    document.getElementById("manualDescription").value = "";
+    document.getElementById("manualHours").value = "";
+
+    renderManualTaskList();
+    logActivity("✏️", `Manual task added: <strong>${escapeHtml(title)}</strong>`);
+  });
 };
 
 // ── Requirement form submit → call AI ─────────────────────────
@@ -524,6 +566,28 @@ const updateReviewSummary = () => {
     `<strong>${state.tasks.length} tasks</strong> · Total estimated effort: <strong>${total} hours</strong>`;
 
   document.getElementById("approveBtn").disabled = state.tasks.length === 0;
+};
+
+// Transfer manual tasks into the shared review step
+const initManualReview = () => {
+  document.getElementById("manualReviewBtn").addEventListener("click", () => {
+    if (manualTasks.length === 0) return;
+
+    // Populate shared state from manual form fields
+    state.projectName = document.getElementById("manualProjectName").value.trim() || "Manual Entry";
+    state.priority = document.getElementById("manualPriority").value;
+    state.department = document.getElementById("manualDepartment").value;
+    state.requirement = "(Manual entry — no AI analysis)";
+    state.userStories = [];
+    state.tasks = manualTasks.map(t => ({ ...t }));
+
+    // Update review header title to show "Manual Review" instead of "Review AI Output"
+    document.querySelector("#step-review .section__title").textContent = "Review Manual Tasks";
+
+    logActivity("✏️", `Manual review started: <strong>${state.tasks.length} tasks</strong> for <strong>${state.projectName}</strong>`);
+    renderReview();
+    showStep("step-review");
+  });
 };
 
 // ── Approve → generate mock Jira tickets ─────────────────────
