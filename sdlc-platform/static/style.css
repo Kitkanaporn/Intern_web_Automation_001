@@ -2,22 +2,50 @@
 
 /* ── CSS Variables ── */
 :root {
+  /* Dark Mode Palette */
   --color-bg: #0f172a;
   --color-surface: #1e293b;
   --color-surface-2: #273548;
   --color-border: #334155;
   --color-text: #e2e8f0;
   --color-text-muted: #94a3b8;
-  --color-primary: #6366f1;
+  --color-primary: #6366f1; /* Indigo */
   --color-primary-hover: #4f46e5;
   --color-success: #10b981;
   --color-success-hover: #059669;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
   --color-ghost: transparent;
+
+  /* New Yellow Accent */
+  --color-accent-yellow: #facc15; /* A vibrant yellow */
+  --color-accent-yellow-hover: #eab308;
+
   --radius: 8px;
   --radius-lg: 12px;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Light Mode Palette */
+body.light-mode {
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  --color-primary: #4f46e5; /* Slightly darker indigo for contrast */
+  --color-primary-hover: #4338ca;
+  --color-success: #059669;
+  --color-success-hover: #047857;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+
+  /* Yellow accent remains the same */
+  --color-accent-yellow: #eab308;
+  --color-accent-yellow-hover: #d97706;
+
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* ── Reset ── */
@@ -30,14 +58,18 @@
 body {
   background: var(--color-bg);
   color: var(--color-text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; /* Added Inter font */
   font-size: 14px;
   line-height: 1.5;
   height: 100vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease; /* Smooth theme transition */
 }
+
+/* Add Inter font import (ideally from Google Fonts in HTML head) */
+/* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'); */
 
 /* ── Navbar ── */
 .navbar {
@@ -49,6 +81,7 @@ body {
   padding: 12px 20px;
   flex-shrink: 0;
   z-index: 10;
+  box-shadow: var(--shadow); /* Added shadow for depth */
 }
 
 .navbar__brand {
@@ -62,13 +95,13 @@ body {
 }
 
 .navbar__title {
-  font-size: 16px;
+  font-size: 18px; /* Slightly larger */
   font-weight: 700;
   color: var(--color-text);
 }
 
 .navbar__sub {
-  font-size: 12px;
+  font-size: 13px; /* Slightly larger */
   color: var(--color-text-muted);
   border-left: 1px solid var(--color-border);
   padding-left: 10px;
@@ -79,7 +112,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 13px; /* Slightly larger */
   color: var(--color-text-muted);
 }
 
@@ -172,7 +205,7 @@ body {
 }
 
 .section {
-  max-width: 680px;
+  max-width: 900px;
 }
 
 .section__title {
@@ -420,10 +453,76 @@ body {
   border-bottom: 1px solid var(--color-primary);
 }
 
-.task-card__desc {
+/* ── Roadmap Sections ── */
+.roadmap-section {
+  margin-bottom: 30px;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.roadmap-section__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.roadmap-section__title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.roadmap-section__empty {
   font-size: 12px;
   color: var(--color-text-muted);
+  font-style: italic;
+  padding: 12px;
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+}
+
+/* ── Story Card ── */
+.story-card {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-primary);
+  border-left: 4px solid var(--color-primary);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+
+.story-card__label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.story-card__text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+.task-card__desc-edit {
+  width: 100%;
+  font-size: 12px;
   margin-bottom: 10px;
+  min-height: 50px;
 }
 
 .task-card__footer {
@@ -477,8 +576,22 @@ body {
   color: var(--color-text-muted);
 }
 
-.review-summary strong {
-  color: var(--color-text);
+/* ── Refine Section ── */
+.refine-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-top: 20px;
+}
+
+.refine-section .subsection__title {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.refine-section .form__textarea {
+  margin-bottom: 16px;
 }
 
 /* ── Success banner ── */
@@ -791,7 +904,6 @@ body {
   margin-top: 32px;
 }
 
-/* ── Tab bar ── */
 .tab-bar {
   display: flex;
   gap: 4px;
@@ -859,7 +971,74 @@ body {
 }
 
 /* ── Kanban section override for full width ── */
-#section-jira-board,
-#section-history {
+.section--full {
   max-width: 100%;
+  height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+
+.jira-browser-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.jira-browser-header .section__title {
+  margin-bottom: 0;
+}
+
+.jira-iframe-container {
+  flex: 1;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  position: relative;
+}
+
+.jira-portal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface);
+  text-align: center;
+  padding: 40px;
+  z-index: 5;
+}
+
+.jira-portal__content {
+  max-width: 400px;
+}
+
+.jira-portal__icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 20px;
+}
+
+.jira-portal__title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.jira-portal__text {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.jira-portal__hint {
+  margin-top: 20px;
+  color: var(--color-primary);
+  opacity: 0.8;
 }

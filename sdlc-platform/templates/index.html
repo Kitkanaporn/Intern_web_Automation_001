@@ -19,6 +19,9 @@
       <span class="status-dot status-dot--ready"></span>
       <span>Ready</span>
     </div>
+    <button class="btn btn--ghost btn--sm" id="themeToggle">
+      <span class="navbar__icon">💡</span>
+    </button>
   </header>
 
   <!-- ── Main layout ── -->
@@ -94,6 +97,35 @@
                   </select>
                 </div>
               </div>
+
+              <div class="form__row form__row--split">
+                <!-- Dual Slider: User Stories -->
+                <div>
+                  <div class="slider-header">
+                    <label class="form__label">User Stories (Min - Max)</label>
+                    <span class="slider-value" id="valStories">3 - 5</span>
+                  </div>
+                  <div class="range-container">
+                    <div class="range-track" id="trackStories"></div>
+                    <input type="range" class="range-input range-input--min" id="minStories" value="3" min="1" max="10" step="1">
+                    <input type="range" class="range-input range-input--max" id="maxStories" value="5" min="1" max="10" step="1">
+                  </div>
+                </div>
+
+                <!-- Dual Slider: Tasks -->
+                <div>
+                  <div class="slider-header">
+                    <label class="form__label">Tasks (Min - Max)</label>
+                    <span class="slider-value" id="valTasks">8 - 15</span>
+                  </div>
+                  <div class="range-container">
+                    <div class="range-track" id="trackTasks"></div>
+                    <input type="range" class="range-input range-input--min" id="minTasks" value="8" min="5" max="30" step="1">
+                    <input type="range" class="range-input range-input--max" id="maxTasks" value="15" min="5" max="30" step="1">
+                  </div>
+                </div>
+              </div>
+
               <button class="btn btn--primary btn--full" type="submit" id="analyzeBtn">
                 <span id="analyzeBtnText">Analyze with AI ✨</span>
                 <span id="analyzeSpinner" class="spinner hidden"></span>
@@ -167,16 +199,25 @@
 
           <div class="review-meta" id="reviewMeta"></div>
 
-          <h3 class="subsection__title">User Stories</h3>
-          <ul class="story-list" id="storyList"></ul>
-
           <div class="review-tasks-header">
-            <h3 class="subsection__title">Tasks <span id="taskCount"></span></h3>
+            <h3 class="subsection__title">Engineering Roadmap</h3>
             <button class="btn btn--ghost btn--sm" id="addTaskBtn">+ Add Task</button>
           </div>
-          <div id="taskCards"></div>
+          
+          <div id="roadmapContainer"></div>
 
           <div class="review-summary" id="reviewSummary"></div>
+
+          <!-- Refine and Regenerate Section -->
+          <div class="refine-section">
+            <h3 class="subsection__title">Refine & Regenerate AI Output</h3>
+            <textarea class="form__textarea" id="refinePrompt" rows="3"
+              placeholder="e.g. 'Add more details to the security tasks', 'Generate one more user story about performance', 'Reduce the number of frontend tasks.'"></textarea>
+            <button class="btn btn--ghost btn--full" id="regenerateBtn">
+              <span id="regenerateBtnText">Regenerate with Refinements ✨</span>
+              <span id="regenerateSpinner" class="spinner hidden"></span>
+            </button>
+          </div>
 
           <button class="btn btn--success btn--full" id="approveBtn">
             <span id="approveBtnText">Approve & Create Jira Tickets ✅</span>
@@ -199,27 +240,32 @@
       </section>
 
       <!-- ── Section: Jira Board ── -->
-      <section class="section hidden" id="section-jira-board">
-        <h2 class="section__title">Jira Board</h2>
-        <div class="kanban" id="kanban">
-          <div class="kanban__col" data-status="To Do">
-            <h3 class="kanban__col-title">To Do</h3>
-            <div class="kanban__cards" id="col-todo"></div>
-          </div>
-          <div class="kanban__col" data-status="In Progress">
-            <h3 class="kanban__col-title">In Progress</h3>
-            <div class="kanban__cards" id="col-inprogress"></div>
-          </div>
-          <div class="kanban__col" data-status="In Review">
-            <h3 class="kanban__col-title">In Review</h3>
-            <div class="kanban__cards" id="col-inreview"></div>
-          </div>
-          <div class="kanban__col" data-status="Done">
-            <h3 class="kanban__col-title">Done</h3>
-            <div class="kanban__cards" id="col-done"></div>
+      <section class="section section--full hidden" id="section-jira-board">
+        <div class="jira-browser-header">
+          <h2 class="section__title">Jira Cloud Workspace</h2>
+        </div>
+        
+        <div class="jira-iframe-container" id="jiraContainer">
+          <iframe id="jiraIframe" src="" frameborder="0" allowfullscreen></iframe>
+          
+          <!-- Fallback Portal (Visible if iframe is blocked) -->
+          <div id="jiraPortal" class="jira-portal">
+            <div class="jira-portal__content">
+              <span class="jira-portal__icon">🔒</span>
+              <h3 class="jira-portal__title">Jira Connection Protected</h3>
+              <p class="jira-portal__text">
+                Atlassian Jira often blocks "embedded" views for security (Clickjacking protection). 
+                To access your workspace, please use the button below to open Jira in a new tab.
+              </p>
+              <a href="#" id="jiraPortalLink" target="_blank" class="btn btn--primary">
+                Launch Jira Workspace ↗
+              </a>
+              <p class="jira-portal__hint">
+                <small>Tip: Keep Jira open in another tab to stay logged in.</small>
+              </p>
+            </div>
           </div>
         </div>
-        <p class="empty-state hidden" id="boardEmpty">No tickets yet. Submit a requirement to get started.</p>
       </section>
 
       <!-- ── Section: History ── -->

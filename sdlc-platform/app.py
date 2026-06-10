@@ -7,6 +7,8 @@ from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 from google import genai
 import jira_client
+import confluence_client
+import gmail_client
 import requests as http_requests
 
 load_dotenv()
@@ -22,75 +24,62 @@ HISTORY: list = []
 
 # Prompt sent to Gemini for requirement analysis
 GEMINI_PROMPT = """
-You are an SDLC analyst at a financial company. Given this software requirement, return a JSON object with exactly these fields:
-- user_stories: list of user story strings (max 5, format: "As a <role>, I want <goal> so that <benefit>")
-- tasks: list of objects, each with: title (string), description (string), effort_hours (integer), department (string)
-- total_effort_hours: integer, sum of all task hours
+You are a senior SDLC analyst at a financial company (SET Thailand — Stock Exchange of Thailand).
 
-Departments must be one of: Backend Dev, Frontend Dev, QA, DevOps, Business Analysis, Security
+Given the software requirement below, break it down into user stories and GRANULAR engineering tasks.
+
+Rules:
+- Generate between {min_s} and {max_s} user stories.
+- Generate between {min_t} and {max_t} tasks. Each task must be ONE concrete deliverable.
+- IMPORTANT: Every task must have a `story_index` (integer) that refers to the index of the user story it belongs to (0-based).
+- Title: short imperative phrase (max 10 words).
+- Description: 2–3 sentences.
+- effort_hours: realistic integer (1–24 hours).
+- department: Backend Dev, Frontend Dev, QA, DevOps, Business Analysis, Security
+
+Return a JSON object with exactly these fields:
+{{
+  "user_stories": ["As a <role>, I want <goal> so that <benefit>", ...],
+  "tasks": [
+    {{"title": "...", "description": "...", "effort_hours": 4, "department": "Backend Dev", "story_index": 0}},
+    ...
+  ],
+  "total_effort_hours": 0
+}}
 
 Requirement: {requirement}
 
-Return ONLY valid JSON. No markdown, no explanation, no code fences. Just the raw JSON object.
+Return ONLY valid JSON.
 """
 
 # ── Demo mode fallback ────────────────────────────────────────
 def demo_response(requirement: str) -> dict:
     """
-    Return realistic fake AI output when DEMO_MODE=true in .env.
-    Used when Gemini API is unavailable or during presentations.
+    Return granular fake AI output when DEMO_MODE=true in .env.
     """
-    short = requirement[:60] if len(requirement) > 60 else requirement
+    short = requirement[:50] if len(requirement) > 50 else requirement
     return {
         "user_stories": [
-            f"As a user, I want to {short[:40].lower()} so that I can improve my workflow",
-            "As a developer, I want clear technical specifications so that I can implement correctly",
-            "As a QA engineer, I want defined acceptance criteria so that I can write proper tests",
-            "As a project manager, I want effort estimates so that I can plan the sprint",
-            "As a stakeholder, I want progress visibility so that I can track delivery",
+            f"As a user, I want to {short[:40].lower()} so that I can improve my daily workflow",
+            "As a developer, I want a clear API contract so that I can implement each endpoint without ambiguity",
+            "As a QA engineer, I want defined acceptance criteria per task so that I can write targeted tests",
         ],
         "tasks": [
-            {"title": "Requirement Analysis & System Design", "description": "Analyze requirements, design system architecture and database schema", "effort_hours": 8, "department": "Business Analysis"},
-            {"title": "Backend API Development", "description": "Implement REST API endpoints, business logic, and data models", "effort_hours": 16, "department": "Backend Dev"},
-            {"title": "Frontend UI Implementation", "description": "Build responsive user interface and connect to backend APIs", "effort_hours": 12, "department": "Frontend Dev"},
-            {"title": "Security Review & Implementation", "description": "Implement authentication, authorization, and security best practices", "effort_hours": 6, "department": "Security"},
-            {"title": "QA Testing & Bug Fixes", "description": "Write and execute test cases, perform regression testing", "effort_hours": 8, "department": "QA"},
-            {"title": "CI/CD Pipeline & Deployment", "description": "Set up deployment pipeline and deploy to staging environment", "effort_hours": 4, "department": "DevOps"},
+            {"title": "Define functional requirements document", "description": "Write a structured requirements doc covering scope, actors, and edge cases.", "effort_hours": 4, "department": "Business Analysis", "story_index": 0},
+            {"title": "Design database schema and ERD", "description": "Model all entities, relationships, and indexes required by the feature.", "effort_hours": 4, "department": "Backend Dev", "story_index": 0},
+            {"title": "Build REST API endpoints", "description": "Expose CRUD endpoints for the feature following the existing API conventions.", "effort_hours": 6, "department": "Backend Dev", "story_index": 1},
+            {"title": "Build UI screens and components", "description": "Implement all required views according to the wireframes.", "effort_hours": 8, "department": "Frontend Dev", "story_index": 1},
+            {"title": "Write integration and API tests", "description": "Cover all happy paths and key error cases for the new endpoints.", "effort_hours": 6, "department": "QA", "story_index": 2},
         ],
-        "total_effort_hours": 54,
+        "total_effort_hours": 28,
     }
 
 
-# ── Gemini helper ────────────────────────────────────────────
-def call_gemini(requirement: str) -> dict:
-    """
-    Send requirement text to Gemini API and parse the JSON response.
-    Falls back to demo_response if DEMO_MODE=true in .env.
-    """
-    if os.getenv("DEMO_MODE", "false").lower() == "true":
-        return demo_response(requirement)
-
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key or api_key == "your_gemini_api_key_here":
-        raise ValueError("GEMINI_API_KEY not set in .env file")
-
-    client = genai.Client(api_key=api_key)
-    prompt = GEMINI_PROMPT.format(requirement=requirement)
-    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-    raw = response.text.strip()
-
-    # Strip markdown code fences if Gemini adds them anyway
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
-    return json.loads(raw)
-
+import time
 
 # ── Jira ticket creation helper ───────────────────────────────
 def create_jira_ticket(task: dict, req_id: str) -> dict:
+
     """
     Create a real Jira issue and return a ticket dict with the real Jira key.
     Calls jira_client.create_issue() which calls the Jira REST API.
@@ -128,12 +117,28 @@ def analyze():
     """
     data = request.get_json()
     requirement = (data or {}).get("requirement", "").strip()
+    additional_prompt = (data or {}).get("additional_prompt", "").strip()
+    min_s = (data or {}).get("min_stories", 3)
+    max_s = (data or {}).get("max_stories", 5)
+    min_t = (data or {}).get("min_tasks", 8)
+    max_t = (data or {}).get("max_tasks", 15)
 
     if not requirement:
         return jsonify({"error": "Requirement text is required"}), 400
 
     try:
-        result = call_gemini(requirement)
+        # Pass custom ranges to the prompt
+        formatted_prompt = GEMINI_PROMPT.format(
+            requirement=requirement, 
+            min_s=min_s, max_s=max_s,
+            min_t=min_t, max_t=max_t
+        )
+        
+        # Append additional prompt if provided
+        if additional_prompt:
+            formatted_prompt += f"\n\nAdditional instructions: {additional_prompt}"
+
+        result = call_gemini_with_prompt(formatted_prompt, requirement)
         return jsonify(result)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -143,11 +148,50 @@ def analyze():
         return jsonify({"error": f"AI analysis failed: {str(e)}"}), 500
 
 
+def call_gemini_with_prompt(prompt: str, original_requirement: str) -> dict:
+    """
+    Internal helper to call Gemini with a pre-formatted prompt.
+    """
+    if os.getenv("DEMO_MODE", "false").lower() == "true":
+        return demo_response(original_requirement)
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key or api_key == "your_gemini_api_key_here":
+        raise ValueError("GEMINI_API_KEY not set in .env file")
+
+    client = genai.Client(api_key=api_key)
+    
+    max_retries = 5
+    base_delay = 5
+    
+    for attempt in range(max_retries + 1):
+        try:
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            raw = response.text.strip()
+            break
+        except Exception as e:
+            error_msg = str(e)
+            if ("503" in error_msg or "429" in error_msg) and attempt < max_retries:
+                wait_time = 15 if "429" in error_msg else base_delay * (2 ** attempt)
+                time.sleep(wait_time)
+                continue
+            raise e
+
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+
+    return json.loads(raw)
+
+
 @app.route("/api/approve", methods=["POST"])
 def approve():
     """
     Accept the human-approved task list, create real Jira tickets,
     log the requirement to history, and return the created tickets.
+    Triggers Confluence and Gmail integrations.
     """
     data = request.get_json() or {}
     tasks = data.get("tasks", [])
@@ -170,6 +214,8 @@ def approve():
     except Exception as e:
         return jsonify({"error": f"Failed to create Jira tickets: {str(e)}"}), 500
 
+    # Jira tickets exist now — commit them locally before attempting any
+    # best-effort integrations, so a Confluence/Gmail failure can't lose them.
     MOCK_TICKETS.extend(new_tickets)
 
     HISTORY.append({
@@ -184,6 +230,18 @@ def approve():
     })
 
     email_preview = build_email_preview(project_name, department, new_tickets)
+
+    # ── Integration: Confluence (best-effort, doesn't fail the request) ──
+    try:
+        confluence_client.create_page(project_name, requirement, new_tickets)
+    except Exception as e:
+        print(f"Failed to create Confluence page: {e}")
+
+    # ── Integration: Gmail (best-effort, doesn't fail the request) ──
+    try:
+        gmail_client.send_email(email_preview["to"], email_preview["subject"], email_preview["body"])
+    except Exception as e:
+        print(f"Failed to send kickoff email: {e}")
 
     return jsonify({
         "req_id": req_id,
@@ -222,9 +280,31 @@ def update_ticket_status(jira_key: str):
     return jsonify({"error": f"Ticket {jira_key} not found in local cache"}), 404
 
 
+@app.route("/api/config", methods=["GET"])
+def get_config():
+    """
+    Provide public configuration to the frontend, such as the Jira URL.
+    """
+    return jsonify({
+        "jira_url": os.getenv("JIRA_URL", "https://your-domain.atlassian.net")
+    })
+
+
 @app.route("/api/tickets", methods=["GET"])
 def get_tickets():
-    """Return all Jira tickets from the local session cache."""
+    """
+    Return all Jira tickets from the local session cache.
+    Syncs the latest status from Jira API for each ticket if possible.
+    """
+    # Sync statuses in a real environment (skipped in demo mode for speed)
+    if os.getenv("DEMO_MODE", "false").lower() != "true":
+        for ticket in MOCK_TICKETS:
+            try:
+                current_status = jira_client.get_status(ticket["id"])
+                ticket["status"] = current_status
+            except (ValueError, http_requests.RequestException):
+                pass
+
     return jsonify(MOCK_TICKETS)
 
 
